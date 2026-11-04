@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 
 # 모바일 전용 뷰포트 및 여백 최적화 (스마트폰 1화면 캡처)
 st.set_page_config(page_title="MY VISON 2050", layout="centered", initial_sidebar_state="collapsed")
@@ -133,28 +132,30 @@ with tab1:
     total_val1 = df1["평가금액"].sum()
     
     # 비율(%) 계산
-    df1["비율(%)"] = (df1["평가금액"] / total_val1 * 100).round(1) if total_val1 > 0 else 0
+    raw_ratios = (df1["평가금액"] / total_val1 * 100).round(1) if total_val1 > 0 else 0
+    df1["비율(%)"] = raw_ratios.map(lambda x: f"{x:.1f}%")
     
-    # 그룹별 계(%) 정확한 위치 지정 표기
-    group_totals = df1.groupby("그룹")["비율(%)"].sum().round(1)
-    ke_col = [None] * len(df1)
-    ke_col[1] = group_totals[1] # 테슬라 그룹 (row 2)
-    ke_col[4] = group_totals[2] # 미국배당다우존스 그룹 (row 5)
-    ke_col[6] = group_totals[3] # TIGER배당커버드콜
-    ke_col[7] = group_totals[4] # RISE글로벌리얼티인컴
-    ke_col[8] = group_totals[5] # 일드맥스
-    ke_col[9] = group_totals[6] # ACE미국30년국채
+    # 그룹별 계(%) 정확한 위치 지정 표기 (None 대신 빈 문자열 "")
+    group_totals = raw_ratios.groupby(df1["그룹"]).sum().round(1)
+    ke_col = [""] * len(df1)
+    ke_col[1] = f"{group_totals[1]:.1f}%" # 테슬라 그룹 (row 2)
+    ke_col[4] = f"{group_totals[2]:.1f}%" # 미국배당다우존스 그룹 (row 5)
+    ke_col[6] = f"{group_totals[3]:.1f}%" # TIGER배당커버드콜
+    ke_col[7] = f"{group_totals[4]:.1f}%" # RISE글로벌리얼티인컴
+    ke_col[8] = f"{group_totals[5]:.1f}%" # 일드맥스
+    ke_col[9] = f"{group_totals[6]:.1f}%" # ACE미국30년국채
     
     df1["계(%)"] = ke_col
     
+    # 너비 배치를 조정하여 종목 옆 공간 제거
     edited_df1 = st.data_editor(
         df1[["구분", "종목", "평가금액", "비율(%)", "계(%)"]],
         column_config={
             "구분": st.column_config.TextColumn("구분", width="small"),
-            "종목": st.column_config.TextColumn("종목", width="medium"),
-            "평가금액": st.column_config.NumberColumn("평가금액(원)", format="%,d", min_value=0),
-            "비율(%)": st.column_config.NumberColumn("비율", format="%.1f%%"),
-            "계(%)": st.column_config.NumberColumn("계(%)", format="%.1f%%"),
+            "종목": st.column_config.TextColumn("종목", width="large"), # 종목 너비 확대하여 우측 빈 공간 흡수
+            "평가금액": st.column_config.NumberColumn("평가금액(원)", format="%,d", min_value=0, width="medium"),
+            "비율(%)": st.column_config.TextColumn("비율", width="small"),
+            "계(%)": st.column_config.TextColumn("계(%)", width="small"),
         },
         disabled=["구분", "종목", "비율(%)", "계(%)"],
         hide_index=True,
@@ -220,13 +221,12 @@ with tab2:
             "이익": st.column_config.NumberColumn("이익", format="%,d"),
             "수익률(%)": st.column_config.NumberColumn("수익률", format="%.1f%%"),
         },
-        disabled=["구분", "평가금", "이익", "수익률(%)"], # 평가금은 자동 연동
+        disabled=["구분", "평가금", "이익", "수익률(%)"],
         hide_index=True,
         use_container_width=True,
         key="compact_fin_editor"
     )
     
-    # 투자금 수정 반영
     for idx, row in edited_fin.iterrows():
         k = row["구분"]
         if k in st.session_state.df2_fin_inv:
@@ -321,7 +321,7 @@ with tab3:
             "윤찬": st.column_config.NumberColumn("윤찬", format="%d세"),
             "윤찬금액": st.column_config.NumberColumn("윤찬금액", format="%,d"),
         },
-        disabled=["연도", "김철현", "이민주", "윤서", "윤찬"], # 연도와 나이 고정
+        disabled=["연도", "김철현", "이민주", "윤서", "윤찬"],
         hide_index=True,
         use_container_width=True,
         key="fixed_roadmap_editor"
