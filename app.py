@@ -1,74 +1,78 @@
 import streamlit as st
 import pandas as pd
 
-# 모바일 전용 뷰포트 및 여백 최소화 (스마트폰 1화면 캡처 최적화)
+# 모바일 전용 뷰포트 및 여백 극소화 (스마트폰 1화면 캡처 최적화)
 st.set_page_config(page_title="MY VISON 2050", layout="centered", initial_sidebar_state="collapsed")
 
 st.markdown("""
     <style>
-        /* 모바일 1화면 캡처를 위한 전체 여백 및 간격 대폭 축소 */
+        /* 모바일 1화면 캡처를 위한 전체 여백 및 간격 극소화 */
         .block-container { 
-            padding-top: 0.3rem !important; 
-            padding-bottom: 0.3rem !important; 
-            padding-left: 0.4rem !important; 
-            padding-right: 0.4rem !important; 
+            padding-top: 0.1rem !important; 
+            padding-bottom: 0.1rem !important; 
+            padding-left: 0.2rem !important; 
+            padding-right: 0.2rem !important; 
         }
-        footer { visibility: hidden; }
-        header { visibility: hidden; }
+        footer { display: none !important; }
+        header { display: none !important; }
         
         /* 콤팩트 카드 디자인 */
         .app-card {
             background-color: #ffffff;
-            border-radius: 8px;
-            padding: 8px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+            border-radius: 6px;
+            padding: 4px 6px !important;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.05);
             border: 1px solid #eaeeef;
         }
         .header-title { 
             text-align: center; 
             font-weight: 800; 
-            font-size: 1.05rem; 
+            font-size: 0.95rem; 
             color: #1a1a1a; 
-            margin-bottom: 4px; 
+            margin-bottom: 2px; 
         }
         .section-subtitle { 
             font-weight: 700; 
-            font-size: 0.78rem; 
+            font-size: 0.72rem; 
             color: #1a73e8; 
-            margin-top: 4px; 
-            margin-bottom: 2px; 
+            margin-top: 2px; 
+            margin-bottom: 1px; 
         }
         
-        /* Streamlit 기본 요소 간격 축소 */
+        /* Streamlit 기본 요소 간격 극소화 (상하 공백 제거) */
         div[data-testid="stVerticalBlock"] > div {
-            gap: 0.2rem !important;
+            gap: 0.1rem !important;
         }
         
-        /* 표 폰트 사이즈 조절 */
+        /* 표 폰트 크기 1단계 축소, 여백 최소화, 줄바꿈 방지 */
         .stDataFrame {
-            font-size: 0.75rem !important;
+            font-size: 0.68rem !important;
+        }
+        .stDataFrame td, .stDataFrame th {
+            padding: 2px 3px !important;
+            white-space: nowrap !important;
         }
         
-        /* 하단 요약 및 총자산 박스 */
+        /* 하단 요약 및 총자산 박스 압축 */
         .summary-box { 
             background-color: #eef6ff; 
-            padding: 6px; 
-            border-radius: 6px; 
+            padding: 4px; 
+            border-radius: 4px; 
             font-weight: bold; 
             text-align: center; 
-            margin-top: 6px; 
+            margin-top: 4px; 
             color: #1a73e8; 
-            font-size: 0.85rem; 
+            font-size: 0.78rem; 
         }
         .net-asset-box { 
             background-color: #e6f4ea; 
-            padding: 8px; 
-            border-radius: 6px; 
+            padding: 5px; 
+            border-radius: 4px; 
             font-weight: bold; 
             text-align: center; 
-            margin-top: 6px; 
+            margin-top: 4px; 
             color: #137333; 
-            font-size: 0.95rem; 
+            font-size: 0.88rem; 
         }
     </style>
 """, unsafe_allow_html=True)
@@ -77,13 +81,12 @@ st.markdown("""
 tab1, tab2, tab3 = st.tabs(["📊 1. 금융포트폴리오", "🏠 2. VISON2050", "👶 3. 자녀증여"])
 
 # ----------------------------------------------------
-# TAB 1: 금융자산 포트폴리오 (단일 표로 통합 & 콤마 표기)
+# TAB 1: 금융자산 포트폴리오
 # ----------------------------------------------------
 with tab1:
     st.markdown('<div class="app-card">', unsafe_allow_html=True)
     st.markdown('<div class="header-title">금융자산 포트폴리오</div>', unsafe_allow_html=True)
     
-    # 세션 상태 초기화 (수치 변경 유지)
     if "df1_data" not in st.session_state:
         st.session_state.df1_data = pd.DataFrame([
             {"구분": "CMA", "종목": "테슬라", "평가금액": 54138000, "그룹": "테슬라"},
@@ -101,12 +104,10 @@ with tab1:
     df1 = st.session_state.df1_data.copy()
     total_val1 = df1["평가금액"].sum()
     
-    # 비율 및 그룹 계(%) 자동 계산
     df1["비율(%)"] = (df1["평가금액"] / total_val1 * 100).round(1) if total_val1 > 0 else 0
     group_sums = df1.groupby("그룹")["비율(%)"].transform("sum").round(1)
     df1["계(%)"] = group_sums
     
-    # 통합 편집 표 (단 하나만 출력)
     edited_df1 = st.data_editor(
         df1[["구분", "종목", "평가금액", "비율(%)", "계(%)"]],
         column_config={
@@ -116,20 +117,18 @@ with tab1:
             "비율(%)": st.column_config.NumberColumn("비율", format="%.1f%%"),
             "계(%)": st.column_config.NumberColumn("계(%)", format="%.1f%%"),
         },
-        disabled=["구분", "종목", "비율(%)", "계(%)"], # 평가금액만 수정 가능
+        disabled=["구분", "종목", "비율(%)", "계(%)"],
         hide_index=True,
         use_container_width=True,
         key="single_tab1_editor"
     )
     
-    # 값 업데이트 저장
     st.session_state.df1_data["평가금액"] = edited_df1["평가금액"]
-
     st.markdown(f'<div class="summary-box">총액: {total_val1:,.0f} 원</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# TAB 2: VISON 2050 (한 화면 캡처용 압축 디자인)
+# TAB 2: VISON 2050 (1페이지 캡처용 압축 디자인)
 # ----------------------------------------------------
 with tab2:
     st.markdown('<div class="app-card">', unsafe_allow_html=True)
@@ -172,7 +171,7 @@ with tab2:
     
     fin_total_eval = edited_fin["평가금"].sum()
     
-    # 2. 부채 (마통/주담대 상세 분리)
+    # 2. 부채
     st.markdown('<div class="section-subtitle">2. 부채</div>', unsafe_allow_html=True)
     if "df2_debt" not in st.session_state:
         st.session_state.df2_debt = pd.DataFrame([
@@ -236,13 +235,13 @@ with tab2:
     
     st.markdown(f'''
     <div class="net-asset-box">
-        총 자산 (순자산): <span style="font-size: 1.15rem; color: #137333;">{net_asset:,.0f} 원</span>
+        총 자산 (순자산): <span style="font-size: 1.05rem; color: #137333;">{net_asset:,.0f} 원</span>
     </div>
     ''', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# TAB 3: 자녀 증여 로드맵 (연도/나이 고정)
+# TAB 3: 자녀 증여 로드맵 (괄호 명칭 간소화 & 가로 폭 축소)
 # ----------------------------------------------------
 with tab3:
     st.markdown('<div class="app-card">', unsafe_allow_html=True)
@@ -250,38 +249,37 @@ with tab3:
     
     if "df3_data" not in st.session_state:
         st.session_state.df3_data = pd.DataFrame([
-            {"연도": 2021, "김철현": 34, "이민주": 38, "김윤서(나이)": 5, "김윤서(평가금)": 4989172, "김윤찬(나이)": 2, "김윤찬(평가금)": 3744170},
-            {"연도": 2022, "김철현": 35, "이민주": 39, "김윤서(나이)": 6, "김윤서(평가금)": 5403917, "김윤찬(나이)": 3, "김윤찬(평가금)": 4120631},
-            {"연도": 2023, "김철현": 36, "이민주": 40, "김윤서(나이)": 7, "김윤서(평가금)": 8103905, "김윤찬(나이)": 4, "김윤찬(평가금)": 6691746},
-            {"연도": 2024, "김철현": 37, "이민주": 41, "김윤서(나이)": 8, "김윤서(평가금)": 29299969, "김윤찬(나이)": 5, "김윤찬(평가금)": 17420077},
-            {"연도": 2025, "김철현": 38, "이민주": 42, "김윤서(나이)": 9, "김윤서(평가금)": 33707000, "김윤찬(나이)": 6, "김윤찬(평가금)": 21688000},
-            {"연도": 2026, "김철현": 39, "이민주": 43, "김윤서(나이)": 10, "김윤서(평가금)": 30678000, "김윤찬(나이)": 7, "김윤찬(평가금)": 20015000},
-            {"연도": 2027, "김철현": 40, "이민주": 44, "김윤서(나이)": 11, "김윤서(평가금)": 34946640, "김윤찬(나이)": 8, "김윤찬(평가금)": 26430600},
-            {"연도": 2028, "김철현": 41, "이민주": 45, "김윤서(나이)": 12, "김윤서(평가금)": 39686371, "김윤찬(나이)": 9, "김윤찬(평가금)": 30489048},
-            {"연도": 2029, "김철현": 42, "이민주": 46, "김윤서(나이)": 13, "김윤서(평가금)": 44934881, "김윤찬(나이)": 10, "김윤찬(평가금)": 35001772},
-            {"연도": 2030, "김철현": 43, "이민주": 47, "김윤서(나이)": 14, "김윤서(평가금)": 50732871, "김윤찬(나이)": 11, "김윤찬(평가금)": 40005114},
+            {"연도": 2021, "김철현": 34, "이민주": 38, "윤서": 5, "윤서금액": 4989172, "윤찬": 2, "윤찬금액": 3744170},
+            {"연도": 2022, "김철현": 35, "이민주": 39, "윤서": 6, "윤서금액": 5403917, "윤찬": 3, "윤찬금액": 4120631},
+            {"연도": 2023, "김철현": 36, "이민주": 40, "윤서": 7, "윤서금액": 8103905, "윤찬": 4, "윤찬금액": 6691746},
+            {"연도": 2024, "김철현": 37, "이민주": 41, "윤서": 8, "윤서금액": 29299969, "윤찬": 5, "윤찬금액": 17420077},
+            {"연도": 2025, "김철현": 38, "이민주": 42, "윤서": 9, "윤서금액": 33707000, "윤찬": 6, "윤찬금액": 21688000},
+            {"연도": 2026, "김철현": 39, "이민주": 43, "윤서": 10, "윤서금액": 30678000, "윤찬": 7, "윤찬금액": 20015000},
+            {"연도": 2027, "김철현": 40, "이민주": 44, "윤서": 11, "윤서금액": 34946640, "윤찬": 8, "윤찬금액": 26430600},
+            {"연도": 2028, "김철현": 41, "이민주": 45, "윤서": 12, "윤서금액": 39686371, "윤찬": 9, "윤찬금액": 30489048},
+            {"연도": 2029, "김철현": 42, "이민주": 46, "윤서": 13, "윤서금액": 44934881, "윤찬": 10, "윤찬금액": 35001772},
+            {"연도": 2030, "김철현": 43, "이민주": 47, "윤서": 14, "윤서금액": 50732871, "윤찬": 11, "윤찬금액": 40005114},
         ])
     
-    # 연도 및 나이 컬럼 수정 불가(disabled) 설정
     edited_df3 = st.data_editor(
         st.session_state.df3_data,
         column_config={
             "연도": st.column_config.NumberColumn("연도", format="%d"),
-            "김철현": st.column_config.NumberColumn("김철현", format="%d세"),
-            "이민주": st.column_config.NumberColumn("이민주", format="%d세"),
-            "김윤서(나이)": st.column_config.NumberColumn("윤서(나이)", format="%d세"),
-            "김윤서(평가금)": st.column_config.NumberColumn("윤서(평가금)", format="%,d"),
-            "김윤찬(나이)": st.column_config.NumberColumn("윤찬(나이)", format="%d세"),
-            "김윤찬(평가금)": st.column_config.NumberColumn("윤찬(평가금)", format="%,d"),
+            "김철현": st.column_config.NumberColumn("철현", format="%d세"),
+            "이민주": st.column_config.NumberColumn("민주", format="%d세"),
+            "윤서": st.column_config.NumberColumn("윤서", format="%d세"),
+            "윤서금액": st.column_config.NumberColumn("윤서금액", format="%,d"),
+            "윤찬": st.column_config.NumberColumn("윤찬", format="%d세"),
+            "윤찬금액": st.column_config.NumberColumn("윤찬금액", format="%,d"),
         },
-        disabled=["연도", "김철현", "이민주", "김윤서(나이)", "김윤찬(나이)"], # 연도와 나이 고정
+        disabled=["연도", "김철현", "이민주", "윤서", "윤찬"],
         hide_index=True,
         use_container_width=True,
         key="fixed_roadmap_editor"
     )
     
-    st.session_state.df3_data["김윤서(평가금)"] = edited_df3["김윤서(평가금)"]
-    st.session_state.df3_data["김윤찬(평가금)"] = edited_df3["김윤찬(평가금)"]
+    st.session_state.df3_data["윤서금액"] = edited_df3["윤서금액"]
+    st.session_state.df3_data["윤찬금액"] = edited_df3["윤찬금액"]
     
-    st.info("💡 비과세 안내: 김윤서(2035년 만19세), 김윤찬(2038년 만19세) 성년 전환 시 5천만원 비과세 한도 확장")
+    st.info("💡 비과세: 윤서(2035년 만19세), 윤찬(2038년 만19세) 성년 전환 시 5천만원 확대")
     st.markdown('</div>', unsafe_allow_html=True)
