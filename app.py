@@ -10,8 +10,8 @@ st.markdown("""
         .block-container { 
             padding-top: 0.1rem !important; 
             padding-bottom: 0.1rem !important; 
-            padding-left: 0.2rem !important; 
-            padding-right: 0.2rem !important; 
+            padding-left: 0.1rem !important; 
+            padding-right: 0.1rem !important; 
         }
         footer { display: none !important; }
         header { display: none !important; }
@@ -20,7 +20,7 @@ st.markdown("""
         .app-card {
             background-color: #ffffff;
             border-radius: 6px;
-            padding: 4px 6px !important;
+            padding: 4px 4px !important;
             box-shadow: 0 1px 4px rgba(0,0,0,0.05);
             border: 1px solid #eaeeef;
         }
@@ -49,7 +49,7 @@ st.markdown("""
             font-size: 0.68rem !important;
         }
         .stDataFrame td, .stDataFrame th {
-            padding: 2px 3px !important;
+            padding: 2px 2px !important;
             white-space: nowrap !important;
         }
         
@@ -147,15 +147,15 @@ with tab1:
     
     df1["계(%)"] = ke_col
     
-    # 너비 배치를 조정하여 종목 옆 공간 제거
+    # 열 너비를 자동 조절하도록 설정하여 불필요한 거대 여백 제거
     edited_df1 = st.data_editor(
         df1[["구분", "종목", "평가금액", "비율(%)", "계(%)"]],
         column_config={
-            "구분": st.column_config.TextColumn("구분", width="small"),
-            "종목": st.column_config.TextColumn("종목", width="large"), # 종목 너비 확대하여 우측 빈 공간 흡수
-            "평가금액": st.column_config.NumberColumn("평가금액(원)", format="%,d", min_value=0, width="medium"),
-            "비율(%)": st.column_config.TextColumn("비율", width="small"),
-            "계(%)": st.column_config.TextColumn("계(%)", width="small"),
+            "구분": st.column_config.TextColumn("구분"),
+            "종목": st.column_config.TextColumn("종목"),
+            "평가금액": st.column_config.NumberColumn("평가금액(원)", format="%,d", min_value=0),
+            "비율(%)": st.column_config.TextColumn("비율"),
+            "계(%)": st.column_config.TextColumn("계(%)"),
         },
         disabled=["구분", "종목", "비율(%)", "계(%)"],
         hide_index=True,
@@ -174,13 +174,11 @@ with tab2:
     st.markdown('<div class="app-card">', unsafe_allow_html=True)
     st.markdown('<div class="header-title">VISON 2050 (종합 자산)</div>', unsafe_allow_html=True)
     
-    # 1번 시트 평가금액 자동 합산 계산
     cma_sum = st.session_state.df1_data[st.session_state.df1_data["구분"] == "CMA"]["평가금액"].sum()
     pension_sum = st.session_state.df1_data[st.session_state.df1_data["구분"] == "연금저축"]["평가금액"].sum()
     irp_sum = st.session_state.df1_data[st.session_state.df1_data["구분"] == "IRP"]["평가금액"].sum()
     isa_sum = st.session_state.df1_data[st.session_state.df1_data["구분"] == "ISA"]["평가금액"].sum()
     
-    # 3번 시트 2026년 자녀 증여 평가금 자동 동기화
     df3_curr = st.session_state.df3_data[st.session_state.df3_data["연도"] == 2026]
     yunseo_val = df3_curr["윤서금액"].values[0] if len(df3_curr) > 0 else 30678000
     yunchan_val = df3_curr["윤찬금액"].values[0] if len(df3_curr) > 0 else 20015000
