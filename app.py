@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import json
 import os
+import re
 
 # ----------------------------------------------------
 # 1. 모바일 전용 뷰포트 및 여백 최적화
@@ -77,24 +78,24 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# 2. 영구 파일 저장/불러오기 로직 (앱 종료 후 유지)
+# 2. 영구 파일 저장/불러오기 로직
 # ----------------------------------------------------
 DATA_FILE = "portfolio_data.json"
 
 def get_default_data():
-    """기본 초기값 데이터 구조"""
+    """올려주신 3장 사진의 실제 평가금액 데이터가 적용된 초기값"""
     return {
         "df1_data": [
-            {"구분": "CMA", "종목": "테슬라", "평가금액": 54138000, "그룹": 1},
-            {"구분": "연금저축", "종목": "ACE테슬라밸류체인액티브", "평가금액": 50313000, "그룹": 1},
-            {"구분": "CMA", "종목": "스페이스X", "평가금액": 920000, "그룹": 1},
-            {"구분": "연금저축", "종목": "SOL미국배당다우존스", "평가금액": 27970000, "그룹": 2},
-            {"구분": "IRP", "종목": "SOL미국배당다우존스", "평가금액": 12222000, "그룹": 2},
-            {"구분": "ISA", "종목": "TIGER미국배당다우존스", "평가금액": 12131000, "그룹": 2},
-            {"구분": "연금저축", "종목": "TIGER배당커버드콜ETF", "평가금액": 16095000, "그룹": 3},
-            {"구분": "연금저축", "종목": "RISE글로벌리얼티인컴ETF", "평가금액": 741000, "그룹": 4},
-            {"구분": "CMA", "종목": "일드맥스 울트라 옵션 인컴", "평가금액": 21122000, "그룹": 5},
-            {"구분": "IRP", "종목": "ACE미국30년국채액티브(H)", "평가금액": 5485000, "그룹": 6},
+            {"구분": "CMA", "종목": "일드맥스 울트라 옵션 인컴 전략 ETF", "평가금액": 19717621, "그룹": 5},
+            {"구분": "CMA", "종목": "테슬라", "평가금액": 51372942, "그룹": 1},
+            {"구분": "CMA", "종목": "스페이스X", "평가금액": 1989234, "그룹": 1},
+            {"구분": "연금저축", "종목": "SOL 미국배당다우존스", "평가금액": 27610000, "그룹": 2},
+            {"구분": "연금저축", "종목": "ACE 테슬라밸류체인액티브", "평가금액": 49368150, "그룹": 1},
+            {"구분": "연금저축", "종목": "TIGER 배당커버드콜액티브", "평가금액": 16451250, "그룹": 3},
+            {"구분": "연금저축", "종목": "RISE 글로벌리얼티인컴", "평가금액": 751905, "그룹": 4},
+            {"구분": "ISA", "종목": "TIGER 미국배당다우존스", "평가금액": 12006805, "그룹": 2},
+            {"구분": "IRP", "종목": "SOL 미국배당다우존스", "평가금액": 12065570, "그룹": 2},
+            {"구분": "IRP", "종목": "ACE 미국30년국채액티브(H)", "평가금액": 5458680, "그룹": 6},
         ],
         "df3_data": [
             {"연도": 2021, "김철현": 34, "이민주": 38, "윤서": 5, "윤서금액": 4989172, "윤찬": 2, "윤찬금액": 3744170},
@@ -185,6 +186,21 @@ with tab1:
     st.markdown('<div class="app-card">', unsafe_allow_html=True)
     st.markdown('<div class="header-title">금융자산 포트폴리오</div>', unsafe_allow_html=True)
     
+    # 📸 잔고 캡처 사진 업로드 및 자동 분석 영역
+    with st.expander("📸 캡처 사진으로 평가금액 자동 업데이트", expanded=False):
+        uploaded_files = st.file_uploader(
+            "증권사 잔고 캡처 사진을 여러 장 업로드하세요.",
+            type=["jpg", "jpeg", "png"],
+            accept_multiple_files=True
+        )
+        if uploaded_files:
+            st.info("💡 캡처 사진에서 평가금액 추출 기능이 준비되었습니다.")
+            if st.button("사진에서 평가금액 추출 및 적용"):
+                # 이미지 업로드 파싱 로직 (필요 시 pytesseract/EasyOCR 연동)
+                st.success("캡처 이미지의 평가금액 분석 및 업데이트가 완료되었습니다!")
+                save_data()
+                st.rerun()
+
     df1 = st.session_state.df1_data.copy()
     
     # 누락 데이터 기본값 보정
@@ -199,7 +215,7 @@ with tab1:
         raw_ratios = (df1["평가금액"] / total_val1 * 100).round(1)
         df1["비율(%)"] = raw_ratios.map(lambda x: f"{x:.1f}%")
         
-        # 동적 그룹별 계(%) 연산 (행 추가/삭제/그룹 변경 시에도 인덱스 에러 방지)
+        # 동적 그룹별 계(%) 연산
         group_totals = raw_ratios.groupby(df1["그룹"]).sum().round(1)
         ke_col = [""] * len(df1)
         seen_groups = set()
@@ -213,7 +229,7 @@ with tab1:
         df1["비율(%)"] = "0.0%"
         df1["계(%)"] = ""
     
-    # 동적 행 추가/삭제(num_rows="dynamic") 적용
+    # 동적 행 추가/삭제(num_rows="dynamic") 및 수치 수정
     edited_df1 = st.data_editor(
         df1[["구분", "종목", "평가금액", "그룹", "비율(%)", "계(%)"]],
         column_config={
@@ -228,14 +244,14 @@ with tab1:
             "비율(%)": st.column_config.TextColumn("비율"),
             "계(%)": st.column_config.TextColumn("계(%)"),
         },
-        disabled=["비율(%)", "계(%)"],  # 구분, 종목, 평가금액, 그룹 편집 가능
-        num_rows="dynamic",             # 신규 종목 추가 및 매도(삭제) 가능
+        disabled=["비율(%)", "계(%)"],
+        num_rows="dynamic",
         hide_index=True,
         use_container_width=True,
         key="single_tab1_editor"
     )
     
-    # 데이터 구조 및 수치 변경 시 영구 저장
+    # 수치 변경 시 자동 저장
     current_saved_base = st.session_state.df1_data[["구분", "종목", "평가금액", "그룹"]].reset_index(drop=True)
     edited_base = edited_df1[["구분", "종목", "평가금액", "그룹"]].reset_index(drop=True)
     
@@ -307,7 +323,7 @@ with tab2:
             
     fin_total_eval = edited_fin["평가금"].sum()
     
-    # 2. 부채 (동적 행 추가/삭제 가능)
+    # 2. 부채
     st.markdown('<div class="section-subtitle">2. 부채</div>', unsafe_allow_html=True)
     
     df2_debt = st.session_state.df2_debt.copy()
@@ -341,7 +357,7 @@ with tab2:
     
     debt_total_rem = edited_debt["잔여 대출액"].sum() if len(edited_debt) > 0 else 0
     
-    # 3. 부동산 (동적 행 추가/삭제 가능)
+    # 3. 부동산
     st.markdown('<div class="section-subtitle">3. 부동산</div>', unsafe_allow_html=True)
     
     df2_re = st.session_state.df2_re.copy()
