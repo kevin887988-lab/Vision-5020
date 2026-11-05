@@ -125,10 +125,10 @@ if "data_loaded" not in st.session_state:
     st.session_state.data_loaded = True
 
 # ----------------------------------------------------
-# 4. OCR 분석 및 진행 상태 바 처리
+# 4. OCR 분석 및 매칭(Multi-line Context) 처리
 # ----------------------------------------------------
 def process_uploaded_images_with_progress(uploaded_files):
-    """업로드된 이미지를 압축/분석하고 프로그레스 바를 보여주는 함수"""
+    """업로드된 이미지를 분석하고 줄바꿈된 종목-금액까지 찾아내는 함수"""
     total_files = len(uploaded_files)
     progress_bar = st.progress(0)
     status_text = st.empty()
@@ -136,72 +136,74 @@ def process_uploaded_images_with_progress(uploaded_files):
 
     try:
         for idx, file in enumerate(uploaded_files):
-            # 상태 업데이트 (퍼센테이지)
             percent_complete = int((idx / total_files) * 100)
             progress_bar.progress(percent_complete)
-            status_text.write(f"⏳ **진행 중:** {file.name} 분석 시작 ({percent_complete}%)...")
+            # 불필요한 예상 시간 제거, 진행 중임을 단순 명시
+            status_text.write(f"⏳ **데이터 추출 진행 중...** ({file.name})")
             
-            # 클라우드 메모리 방지를 위해 이미지 압축(리사이즈) 및 흑백 변환
             img = Image.open(file)
-            img = img.convert('L') # 흑백 변환
+            img = img.convert('L')
             max_size = (1200, 1200)
             img.thumbnail(max_size, Image.Resampling.LANCZOS)
 
-            status_text.write(f"⏳ **진행 중:** {file.name} 텍스트 추출 중 (약 3~5초 소요)...")
             extracted_text = pytesseract.image_to_string(img, lang='kor+eng')
-            
             lines = extracted_text.split('\n')
             
-            # 정규식 및 종목 텍스트 매칭 처리
+            pending_stock_name = None  # 이전 줄에서 발견된 종목명을 기억하는 변수
+            
             for line in lines:
                 clean_line = line.strip()
                 if not clean_line:
                     continue
                 
-                # 정규식 1: 쉼표가 여러 번 포함된 긴 숫자 (예: 51,007,000)
+                # 1) 현재 줄에 종목명이 있는지 먼저 찾기
+                found_stock_in_line = None
+                for stock_name in st.session_state.df1_data['종목']:
+                    search_name = stock_name.replace(" ", "")
+                    # 이름 일부만 맞아도 인식하도록 유연성 부여 (앞 4글자 이상)
+                    if search_name in clean_line.replace(" ", "") or (len(search_name) >= 4 and search_name[:4] in clean_line.replace(" ", "")):
+                        found_stock_in_line = stock_name
+                        pending_stock_name = stock_name # 기억해둠
+                        break
+                
+                # 2) 현재 줄에서 평가금액(숫자) 찾기
                 amounts = re.findall(r'\b(?:\d{1,3})(?:,\d{3}){2,}\b', clean_line)
                 if not amounts:
-                    # 정규식 2: 쉼표 없이 연속된 6자리 이상의 큰 숫자 허용 (예: 51007000)
                     amounts = re.findall(r'\b\d{6,10}\b', clean_line)
                 
+                # 3) 숫자가 발견되었다면, 기억해둔 종목명과 짝짓기
                 if amounts:
                     val_str = amounts[-1].replace(',', '')
                     if not val_str.isdigit():
                         continue
                     val = int(val_str)
                     
-                    # 10만 원 이하의 지나치게 작은 숫자는 평가금액이 아니라고 판단하여 패스
                     if val < 100000:
-                        continue
+                        continue # 너무 작은 숫자는 무시 (수익률, 단가 등일 확률)
+                        
+                    # 같은 줄이든, 이전 줄이든 방금 찾은 종목이 있다면 금액 업데이트
+                    target_stock = found_stock_in_line or pending_stock_name
                     
-                    # 종목명 찾기: 띄어쓰기 무시하고 유연하게 검색
-                    for stock_name in st.session_state.df1_data['종목']:
-                        search_name = stock_name.replace(" ", "")
-                        # ETF 이름 앞뒤 문자열이 약간 잘리더라도 찾을 수 있도록 조정
-                        if search_name in clean_line.replace(" ", "") or search_name[:4] in clean_line.replace(" ", ""):
-                            # 갱신
-                            st.session_state.df1_data.loc[st.session_state.df1_data['종목'] == stock_name, '평가금액'] = val
-                            updated_data.append(f"✅ {stock_name}: {val:,} 원")
-                            break # 한 라인에서 종목을 찾았으면 다음 라인으로
+                    if target_stock:
+                        st.session_state.df1_data.loc[st.session_state.df1_data['종목'] == target_stock, '평가금액'] = val
+                        updated_data.append(f"✅ {target_stock}: {val:,} 원")
+                        pending_stock_name = None # 매칭 성공 시 기억 비우기
 
-            time.sleep(0.5) # UI 반영 대기
+            time.sleep(0.5)
 
-        # 100% 완료 처리
         progress_bar.progress(100)
-        status_text.write("✅ **분석 100% 완료!**")
+        status_text.write("✅ **모든 데이터 추출 완료!**")
         time.sleep(1)
         
-        # 안내 문구 렌더링
         status_text.empty()
         progress_bar.empty()
         
         if updated_data:
-            # 중복 제거 후 출력
             unique_updates = list(set(updated_data))
             st.success(f"수치 자동 추출이 완료되었습니다!\\n\\n" + "\\n".join(unique_updates))
             save_data()
         else:
-            st.warning("⚠️ 사진에서 평가금액 패턴을 찾지 못했습니다. 사진이 흐리거나 표 형태가 다를 수 있습니다.")
+            st.warning("⚠️ 사진에서 평가금액을 인식하지 못했습니다. 화면 캡처가 잘리지 않았는지 확인해주세요.")
             
     except Exception as e:
         progress_bar.empty()
@@ -227,8 +229,7 @@ with tab1:
         if uploaded_files:
             if st.button("🚀 사진에서 평가금액 추출 및 적용"):
                 process_uploaded_images_with_progress(uploaded_files)
-                # 추출 직후 즉각 갱신(rerun)은 보지 못할 수 있으므로, 결과 확인을 위해 약간의 딜레이
-                time.sleep(2)
+                time.sleep(1.5)
                 st.rerun()
 
     df1 = st.session_state.df1_data.copy()
