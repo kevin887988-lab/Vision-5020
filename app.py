@@ -3,6 +3,15 @@ import pandas as pd
 import json
 import os
 import re
+from PIL import Image
+import pytesseract
+
+# ----------------------------------------------------
+# [사전 준비] Tesseract OCR 설치 경로 설정
+# ----------------------------------------------------
+# 윈도우 환경인 경우 Tesseract가 설치된 경로를 아래와 같이 지정해야 합니다.
+# Mac/Linux 환경이거나 환경 변수가 등록된 경우 이 줄은 주석 처리해도 무방합니다.
+# pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 # ----------------------------------------------------
 # 1. 모바일 전용 뷰포트 및 여백 최적화
@@ -83,19 +92,19 @@ st.markdown("""
 DATA_FILE = "portfolio_data.json"
 
 def get_default_data():
-    """올려주신 3장 사진의 실제 평가금액 데이터가 적용된 초기값"""
+    """기본 초기값"""
     return {
         "df1_data": [
-            {"구분": "CMA", "종목": "일드맥스 울트라 옵션 인컴 전략 ETF", "평가금액": 19717621, "그룹": 5},
-            {"구분": "CMA", "종목": "테슬라", "평가금액": 51372942, "그룹": 1},
-            {"구분": "CMA", "종목": "스페이스X", "평가금액": 1989234, "그룹": 1},
-            {"구분": "연금저축", "종목": "SOL 미국배당다우존스", "평가금액": 27610000, "그룹": 2},
-            {"구분": "연금저축", "종목": "ACE 테슬라밸류체인액티브", "평가금액": 49368150, "그룹": 1},
-            {"구분": "연금저축", "종목": "TIGER 배당커버드콜액티브", "평가금액": 16451250, "그룹": 3},
-            {"구분": "연금저축", "종목": "RISE 글로벌리얼티인컴", "평가금액": 751905, "그룹": 4},
-            {"구분": "ISA", "종목": "TIGER 미국배당다우존스", "평가금액": 12006805, "그룹": 2},
-            {"구분": "IRP", "종목": "SOL 미국배당다우존스", "평가금액": 12065570, "그룹": 2},
-            {"구분": "IRP", "종목": "ACE 미국30년국채액티브(H)", "평가금액": 5458680, "그룹": 6},
+            {"구분": "CMA", "종목": "일드맥스 울트라 옵션 인컴", "평가금액": 19794000, "그룹": 5},
+            {"구분": "CMA", "종목": "테슬라", "평가금액": 51007000, "그룹": 1},
+            {"구분": "CMA", "종목": "스페이스X", "평가금액": 1993000, "그룹": 1},
+            {"구분": "연금저축", "종목": "SOL미국배당다우존스", "평가금액": 27610000, "그룹": 2},
+            {"구분": "연금저축", "종목": "ACE테슬라밸류체인액티브", "평가금액": 49368000, "그룹": 1},
+            {"구분": "연금저축", "종목": "TIGER배당커버드콜ETF", "평가금액": 16451000, "그룹": 3},
+            {"구분": "연금저축", "종목": "RISE글로벌리얼티인컴ETF", "평가금액": 751000, "그룹": 4},
+            {"구분": "ISA", "종목": "TIGER미국배당다우존스", "평가금액": 12006000, "그룹": 2},
+            {"구분": "IRP", "종목": "SOL미국배당다우존스", "평가금액": 12065000, "그룹": 2},
+            {"구분": "IRP", "종목": "ACE미국30년국채액티브(H)", "평가금액": 5458000, "그룹": 6},
         ],
         "df3_data": [
             {"연도": 2021, "김철현": 34, "이민주": 38, "윤서": 5, "윤서금액": 4989172, "윤찬": 2, "윤찬금액": 3744170},
@@ -164,7 +173,7 @@ def save_data():
         json.dump(saved_payload, f, ensure_ascii=False, indent=2)
 
 # ----------------------------------------------------
-# 3. 세션 상태 초기화 (최초 1회 저장된 데이터 로드)
+# 3. 세션 상태 초기화
 # ----------------------------------------------------
 if "data_loaded" not in st.session_state:
     loaded_data = load_data()
@@ -175,6 +184,57 @@ if "data_loaded" not in st.session_state:
     st.session_state.df2_re = pd.DataFrame(loaded_data["df2_re"])
     st.session_state.pension_val = loaded_data.get("pension_val", 151000000)
     st.session_state.data_loaded = True
+
+# ----------------------------------------------------
+# 4. OCR 이미지 파싱 및 데이터 업데이트 로직
+# ----------------------------------------------------
+def process_uploaded_images(uploaded_files):
+    """업로드된 이미지에서 종목명과 평가금액을 추출하여 표 업데이트"""
+    try:
+        updated_data = []
+        for file in uploaded_files:
+            # 1. 이미지 로드 및 OCR 수행
+            img = Image.open(file)
+            extracted_text = pytesseract.image_to_string(img, lang='kor+eng')
+
+            # 2. 텍스트 라인별로 정규식을 활용하여 평가금액 파싱 로직
+            # (실제 MTS 앱 구조에 맞춰 정규식 패턴 세밀화 필요)
+            lines = extracted_text.split('\\n')
+            current_stock = None
+            
+            for line in lines:
+                # 불필요한 공백 제거
+                clean_line = line.strip()
+                if not clean_line:
+                    continue
+                
+                # 종목명 유추 (예: '테슬라', 'ACE테슬라밸류체인액티브' 등 키워드 매칭)
+                for stock_name in st.session_state.df1_data['종목']:
+                    # 공백 무시하고 문자열 매칭
+                    if stock_name.replace(" ", "") in clean_line.replace(" ", ""):
+                        current_stock = stock_name
+                        break
+                
+                # 숫자(평가금액) 유추 (쉼표가 포함된 긴 숫자 형태 추출)
+                # 정규식 패턴: 숫자가 쉼표로 나뉘어 있고, 끝자리가 원 단위로 끝나는 긴 수열 탐색
+                amounts = re.findall(r'\\b(?:\\d{1,3})(?:,\\d{3}){2,}\\b', clean_line)
+                
+                if current_stock and amounts:
+                    # 추출된 금액 문자열에서 쉼표 제거 후 정수 변환
+                    val = int(amounts[-1].replace(',', ''))
+                    # 데이터프레임 내 동일 종목명의 평가금액 업데이트
+                    st.session_state.df1_data.loc[st.session_state.df1_data['종목'] == current_stock, '평가금액'] = val
+                    updated_data.append(f"{current_stock}: {val:,} 원")
+                    current_stock = None  # 매칭 성공 시 초기화
+
+        if updated_data:
+            st.success(f"✅ 사진에서 수치를 추출하여 자동 업데이트 했습니다:\\n" + "\\n".join(updated_data))
+            save_data()
+        else:
+            st.warning("⚠️ 사진에서 일치하는 종목의 평가금액을 인식하지 못했습니다.")
+            
+    except Exception as e:
+        st.error(f"❌ 이미지 분석 중 오류가 발생했습니다: {e}")
 
 # 탭 구성
 tab1, tab2, tab3 = st.tabs(["📊 1. 금융포트폴리오", "🏠 2. VISON2050", "👶 3. 자녀증여"])
@@ -194,11 +254,8 @@ with tab1:
             accept_multiple_files=True
         )
         if uploaded_files:
-            st.info("💡 캡처 사진에서 평가금액 추출 기능이 준비되었습니다.")
             if st.button("사진에서 평가금액 추출 및 적용"):
-                # 이미지 업로드 파싱 로직 (필요 시 pytesseract/EasyOCR 연동)
-                st.success("캡처 이미지의 평가금액 분석 및 업데이트가 완료되었습니다!")
-                save_data()
+                process_uploaded_images(uploaded_files)
                 st.rerun()
 
     df1 = st.session_state.df1_data.copy()
@@ -229,7 +286,7 @@ with tab1:
         df1["비율(%)"] = "0.0%"
         df1["계(%)"] = ""
     
-    # 동적 행 추가/삭제(num_rows="dynamic") 및 수치 수정
+    # 동적 행 추가/삭제 및 데이터 그리드 출력
     edited_df1 = st.data_editor(
         df1[["구분", "종목", "평가금액", "그룹", "비율(%)", "계(%)"]],
         column_config={
@@ -251,7 +308,7 @@ with tab1:
         key="single_tab1_editor"
     )
     
-    # 수치 변경 시 자동 저장
+    # 수동 수치 변경 시 자동 저장
     current_saved_base = st.session_state.df1_data[["구분", "종목", "평가금액", "그룹"]].reset_index(drop=True)
     edited_base = edited_df1[["구분", "종목", "평가금액", "그룹"]].reset_index(drop=True)
     
@@ -264,7 +321,7 @@ with tab1:
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# TAB 2: VISON 2050 (1번 시트 및 3번 시트 자동 연동)
+# TAB 2: VISON 2050 (종합 자산)
 # ----------------------------------------------------
 with tab2:
     st.markdown('<div class="app-card">', unsafe_allow_html=True)
