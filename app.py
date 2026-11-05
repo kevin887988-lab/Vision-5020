@@ -5,13 +5,7 @@ import os
 import re
 from PIL import Image
 import pytesseract
-
-# ----------------------------------------------------
-# [사전 준비] Tesseract OCR 설치 경로 설정
-# ----------------------------------------------------
-# 윈도우 환경인 경우 Tesseract가 설치된 경로를 아래와 같이 지정해야 합니다.
-# Mac/Linux 환경이거나 환경 변수가 등록된 경우 이 줄은 주석 처리해도 무방합니다.
-# pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+import time
 
 # ----------------------------------------------------
 # 1. 모바일 전용 뷰포트 및 여백 최적화
@@ -20,69 +14,17 @@ st.set_page_config(page_title="MY VISON 2050", layout="centered", initial_sideba
 
 st.markdown("""
     <style>
-        .block-container { 
-            padding-top: 0.1rem !important; 
-            padding-bottom: 0.1rem !important; 
-            padding-left: 0.1rem !important; 
-            padding-right: 0.1rem !important; 
-        }
+        .block-container { padding-top: 0.1rem !important; padding-bottom: 0.1rem !important; padding-left: 0.1rem !important; padding-right: 0.1rem !important; }
         footer { display: none !important; }
         header { display: none !important; }
-        
-        .app-card {
-            background-color: #ffffff;
-            border-radius: 6px;
-            padding: 4px 4px !important;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.05);
-            border: 1px solid #eaeeef;
-        }
-        .header-title { 
-            text-align: center; 
-            font-weight: 800; 
-            font-size: 0.95rem; 
-            color: #1a1a1a; 
-            margin-bottom: 2px; 
-        }
-        .section-subtitle { 
-            font-weight: 700; 
-            font-size: 0.72rem; 
-            color: #1a73e8; 
-            margin-top: 2px; 
-            margin-bottom: 1px; 
-        }
-        
-        div[data-testid="stVerticalBlock"] > div {
-            gap: 0.1rem !important;
-        }
-        
-        .stDataFrame {
-            font-size: 0.68rem !important;
-        }
-        .stDataFrame td, .stDataFrame th {
-            padding: 2px 2px !important;
-            white-space: nowrap !important;
-        }
-        
-        .summary-box { 
-            background-color: #eef6ff; 
-            padding: 4px; 
-            border-radius: 4px; 
-            font-weight: bold; 
-            text-align: center; 
-            margin-top: 4px; 
-            color: #1a73e8; 
-            font-size: 0.78rem; 
-        }
-        .net-asset-box { 
-            background-color: #e6f4ea; 
-            padding: 5px; 
-            border-radius: 4px; 
-            font-weight: bold; 
-            text-align: center; 
-            margin-top: 4px; 
-            color: #137333; 
-            font-size: 0.88rem; 
-        }
+        .app-card { background-color: #ffffff; border-radius: 6px; padding: 4px 4px !important; box-shadow: 0 1px 4px rgba(0,0,0,0.05); border: 1px solid #eaeeef; }
+        .header-title { text-align: center; font-weight: 800; font-size: 0.95rem; color: #1a1a1a; margin-bottom: 2px; }
+        .section-subtitle { font-weight: 700; font-size: 0.72rem; color: #1a73e8; margin-top: 2px; margin-bottom: 1px; }
+        div[data-testid="stVerticalBlock"] > div { gap: 0.1rem !important; }
+        .stDataFrame { font-size: 0.68rem !important; }
+        .stDataFrame td, .stDataFrame th { padding: 2px 2px !important; white-space: nowrap !important; }
+        .summary-box { background-color: #eef6ff; padding: 4px; border-radius: 4px; font-weight: bold; text-align: center; margin-top: 4px; color: #1a73e8; font-size: 0.78rem; }
+        .net-asset-box { background-color: #e6f4ea; padding: 5px; border-radius: 4px; font-weight: bold; text-align: center; margin-top: 4px; color: #137333; font-size: 0.88rem; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -92,7 +34,6 @@ st.markdown("""
 DATA_FILE = "portfolio_data.json"
 
 def get_default_data():
-    """기본 초기값"""
     return {
         "df1_data": [
             {"구분": "CMA", "종목": "일드맥스 울트라 옵션 인컴", "평가금액": 19794000, "그룹": 5},
@@ -150,7 +91,6 @@ def get_default_data():
     }
 
 def load_data():
-    """파일에서 데이터를 로드 (없을 시 기본값 반환)"""
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -160,7 +100,6 @@ def load_data():
     return get_default_data()
 
 def save_data():
-    """현재 세션 상태의 데이터를 JSON 파일에 저장"""
     saved_payload = {
         "df1_data": st.session_state.df1_data.to_dict(orient="records"),
         "df3_data": st.session_state.df3_data.to_dict(orient="records"),
@@ -186,55 +125,88 @@ if "data_loaded" not in st.session_state:
     st.session_state.data_loaded = True
 
 # ----------------------------------------------------
-# 4. OCR 이미지 파싱 및 데이터 업데이트 로직
+# 4. OCR 분석 및 진행 상태 바 처리
 # ----------------------------------------------------
-def process_uploaded_images(uploaded_files):
-    """업로드된 이미지에서 종목명과 평가금액을 추출하여 표 업데이트"""
-    try:
-        updated_data = []
-        for file in uploaded_files:
-            # 1. 이미지 로드 및 OCR 수행
-            img = Image.open(file)
-            extracted_text = pytesseract.image_to_string(img, lang='kor+eng')
+def process_uploaded_images_with_progress(uploaded_files):
+    """업로드된 이미지를 압축/분석하고 프로그레스 바를 보여주는 함수"""
+    total_files = len(uploaded_files)
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    updated_data = []
 
-            # 2. 텍스트 라인별로 정규식을 활용하여 평가금액 파싱 로직
-            # (실제 MTS 앱 구조에 맞춰 정규식 패턴 세밀화 필요)
-            lines = extracted_text.split('\\n')
-            current_stock = None
+    try:
+        for idx, file in enumerate(uploaded_files):
+            # 상태 업데이트 (퍼센테이지)
+            percent_complete = int((idx / total_files) * 100)
+            progress_bar.progress(percent_complete)
+            status_text.write(f"⏳ **진행 중:** {file.name} 분석 시작 ({percent_complete}%)...")
             
+            # 클라우드 메모리 방지를 위해 이미지 압축(리사이즈) 및 흑백 변환
+            img = Image.open(file)
+            img = img.convert('L') # 흑백 변환
+            max_size = (1200, 1200)
+            img.thumbnail(max_size, Image.Resampling.LANCZOS)
+
+            status_text.write(f"⏳ **진행 중:** {file.name} 텍스트 추출 중 (약 3~5초 소요)...")
+            extracted_text = pytesseract.image_to_string(img, lang='kor+eng')
+            
+            lines = extracted_text.split('\n')
+            
+            # 정규식 및 종목 텍스트 매칭 처리
             for line in lines:
-                # 불필요한 공백 제거
                 clean_line = line.strip()
                 if not clean_line:
                     continue
                 
-                # 종목명 유추 (예: '테슬라', 'ACE테슬라밸류체인액티브' 등 키워드 매칭)
-                for stock_name in st.session_state.df1_data['종목']:
-                    # 공백 무시하고 문자열 매칭
-                    if stock_name.replace(" ", "") in clean_line.replace(" ", ""):
-                        current_stock = stock_name
-                        break
+                # 정규식 1: 쉼표가 여러 번 포함된 긴 숫자 (예: 51,007,000)
+                amounts = re.findall(r'\b(?:\d{1,3})(?:,\d{3}){2,}\b', clean_line)
+                if not amounts:
+                    # 정규식 2: 쉼표 없이 연속된 6자리 이상의 큰 숫자 허용 (예: 51007000)
+                    amounts = re.findall(r'\b\d{6,10}\b', clean_line)
                 
-                # 숫자(평가금액) 유추 (쉼표가 포함된 긴 숫자 형태 추출)
-                # 정규식 패턴: 숫자가 쉼표로 나뉘어 있고, 끝자리가 원 단위로 끝나는 긴 수열 탐색
-                amounts = re.findall(r'\\b(?:\\d{1,3})(?:,\\d{3}){2,}\\b', clean_line)
-                
-                if current_stock and amounts:
-                    # 추출된 금액 문자열에서 쉼표 제거 후 정수 변환
-                    val = int(amounts[-1].replace(',', ''))
-                    # 데이터프레임 내 동일 종목명의 평가금액 업데이트
-                    st.session_state.df1_data.loc[st.session_state.df1_data['종목'] == current_stock, '평가금액'] = val
-                    updated_data.append(f"{current_stock}: {val:,} 원")
-                    current_stock = None  # 매칭 성공 시 초기화
+                if amounts:
+                    val_str = amounts[-1].replace(',', '')
+                    if not val_str.isdigit():
+                        continue
+                    val = int(val_str)
+                    
+                    # 10만 원 이하의 지나치게 작은 숫자는 평가금액이 아니라고 판단하여 패스
+                    if val < 100000:
+                        continue
+                    
+                    # 종목명 찾기: 띄어쓰기 무시하고 유연하게 검색
+                    for stock_name in st.session_state.df1_data['종목']:
+                        search_name = stock_name.replace(" ", "")
+                        # ETF 이름 앞뒤 문자열이 약간 잘리더라도 찾을 수 있도록 조정
+                        if search_name in clean_line.replace(" ", "") or search_name[:4] in clean_line.replace(" ", ""):
+                            # 갱신
+                            st.session_state.df1_data.loc[st.session_state.df1_data['종목'] == stock_name, '평가금액'] = val
+                            updated_data.append(f"✅ {stock_name}: {val:,} 원")
+                            break # 한 라인에서 종목을 찾았으면 다음 라인으로
 
+            time.sleep(0.5) # UI 반영 대기
+
+        # 100% 완료 처리
+        progress_bar.progress(100)
+        status_text.write("✅ **분석 100% 완료!**")
+        time.sleep(1)
+        
+        # 안내 문구 렌더링
+        status_text.empty()
+        progress_bar.empty()
+        
         if updated_data:
-            st.success(f"✅ 사진에서 수치를 추출하여 자동 업데이트 했습니다:\\n" + "\\n".join(updated_data))
+            # 중복 제거 후 출력
+            unique_updates = list(set(updated_data))
+            st.success(f"수치 자동 추출이 완료되었습니다!\\n\\n" + "\\n".join(unique_updates))
             save_data()
         else:
-            st.warning("⚠️ 사진에서 일치하는 종목의 평가금액을 인식하지 못했습니다.")
+            st.warning("⚠️ 사진에서 평가금액 패턴을 찾지 못했습니다. 사진이 흐리거나 표 형태가 다를 수 있습니다.")
             
     except Exception as e:
-        st.error(f"❌ 이미지 분석 중 오류가 발생했습니다: {e}")
+        progress_bar.empty()
+        status_text.empty()
+        st.error(f"❌ 분석 중 에러가 발생했습니다: {e}")
 
 # 탭 구성
 tab1, tab2, tab3 = st.tabs(["📊 1. 금융포트폴리오", "🏠 2. VISON2050", "👶 3. 자녀증여"])
@@ -246,33 +218,31 @@ with tab1:
     st.markdown('<div class="app-card">', unsafe_allow_html=True)
     st.markdown('<div class="header-title">금융자산 포트폴리오</div>', unsafe_allow_html=True)
     
-    # 📸 잔고 캡처 사진 업로드 및 자동 분석 영역
     with st.expander("📸 캡처 사진으로 평가금액 자동 업데이트", expanded=False):
         uploaded_files = st.file_uploader(
-            "증권사 잔고 캡처 사진을 여러 장 업로드하세요.",
+            "증권사 잔고 캡처 사진 업로드",
             type=["jpg", "jpeg", "png"],
             accept_multiple_files=True
         )
         if uploaded_files:
-            if st.button("사진에서 평가금액 추출 및 적용"):
-                process_uploaded_images(uploaded_files)
+            if st.button("🚀 사진에서 평가금액 추출 및 적용"):
+                process_uploaded_images_with_progress(uploaded_files)
+                # 추출 직후 즉각 갱신(rerun)은 보지 못할 수 있으므로, 결과 확인을 위해 약간의 딜레이
+                time.sleep(2)
                 st.rerun()
 
     df1 = st.session_state.df1_data.copy()
     
-    # 누락 데이터 기본값 보정
     for col in ["구분", "종목", "평가금액", "그룹"]:
         if col not in df1.columns:
             df1[col] = "" if col in ["구분", "종목"] else (0 if col == "평가금액" else 1)
             
     total_val1 = df1["평가금액"].sum() if len(df1) > 0 else 0
     
-    # 비율(%) 계산
     if total_val1 > 0 and len(df1) > 0:
         raw_ratios = (df1["평가금액"] / total_val1 * 100).round(1)
         df1["비율(%)"] = raw_ratios.map(lambda x: f"{x:.1f}%")
         
-        # 동적 그룹별 계(%) 연산
         group_totals = raw_ratios.groupby(df1["그룹"]).sum().round(1)
         ke_col = [""] * len(df1)
         seen_groups = set()
@@ -286,15 +256,10 @@ with tab1:
         df1["비율(%)"] = "0.0%"
         df1["계(%)"] = ""
     
-    # 동적 행 추가/삭제 및 데이터 그리드 출력
     edited_df1 = st.data_editor(
         df1[["구분", "종목", "평가금액", "그룹", "비율(%)", "계(%)"]],
         column_config={
-            "구분": st.column_config.SelectboxColumn(
-                "구분", 
-                options=["CMA", "연금저축", "IRP", "ISA", "일반계좌"], 
-                required=True
-            ),
+            "구분": st.column_config.SelectboxColumn("구분", options=["CMA", "연금저축", "IRP", "ISA", "일반계좌"], required=True),
             "종목": st.column_config.TextColumn("종목", required=True),
             "평가금액": st.column_config.NumberColumn("평가금액(원)", format="%,d", min_value=0, default=0),
             "그룹": st.column_config.NumberColumn("그룹", format="%d", min_value=1, default=1),
@@ -308,7 +273,6 @@ with tab1:
         key="single_tab1_editor"
     )
     
-    # 수동 수치 변경 시 자동 저장
     current_saved_base = st.session_state.df1_data[["구분", "종목", "평가금액", "그룹"]].reset_index(drop=True)
     edited_base = edited_df1[["구분", "종목", "평가금액", "그룹"]].reset_index(drop=True)
     
@@ -349,9 +313,7 @@ with tab2:
     ])
     
     df2_fin["이익"] = df2_fin["평가금"] - df2_fin["투자금"]
-    df2_fin["수익률(%)"] = df2_fin.apply(
-        lambda r: round((r["이익"] / r["투자금"] * 100), 1) if r["투자금"] > 0 else 0.0, axis=1
-    )
+    df2_fin["수익률(%)"] = df2_fin.apply(lambda r: round((r["이익"] / r["투자금"] * 100), 1) if r["투자금"] > 0 else 0.0, axis=1)
     
     edited_fin = st.data_editor(
         df2_fin[["구분", "투자금", "평가금", "이익", "수익률(%)"]],
@@ -450,12 +412,7 @@ with tab2:
     
     # 4. 퇴직금 & 순자산 합계
     st.markdown('<div class="section-subtitle">4. 퇴직금 & 최종 순자산</div>', unsafe_allow_html=True)
-    pension_val = st.number_input(
-        "예상 퇴직금(원)", 
-        value=int(st.session_state.pension_val), 
-        step=1000000, 
-        format="%d"
-    )
+    pension_val = st.number_input("예상 퇴직금(원)", value=int(st.session_state.pension_val), step=1000000, format="%d")
     
     if pension_val != st.session_state.pension_val:
         st.session_state.pension_val = pension_val
@@ -472,7 +429,7 @@ with tab2:
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ----------------------------------------------------
-# TAB 3: 자녀 증여 로드맵 (2040년까지 확장)
+# TAB 3: 자녀 증여 로드맵
 # ----------------------------------------------------
 with tab3:
     st.markdown('<div class="app-card">', unsafe_allow_html=True)
