@@ -2,10 +2,6 @@ import streamlit as st
 import pandas as pd
 import json
 import os
-import re
-from PIL import Image
-import pytesseract
-import time
 
 # ----------------------------------------------------
 # 1. 모바일 전용 뷰포트 및 여백 최적화
@@ -124,114 +120,16 @@ if "data_loaded" not in st.session_state:
     st.session_state.pension_val = loaded_data.get("pension_val", 151000000)
     st.session_state.data_loaded = True
 
-# ----------------------------------------------------
-# 4. OCR 분석 및 매칭(Multi-line Context) 처리
-# ----------------------------------------------------
-def process_uploaded_images_with_progress(uploaded_files):
-    """업로드된 이미지를 분석하고 줄바꿈된 종목-금액까지 찾아내는 함수"""
-    total_files = len(uploaded_files)
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    updated_data = []
-
-    try:
-        for idx, file in enumerate(uploaded_files):
-            percent_complete = int((idx / total_files) * 100)
-            progress_bar.progress(percent_complete)
-            # 불필요한 예상 시간 제거, 진행 중임을 단순 명시
-            status_text.write(f"⏳ **데이터 추출 진행 중...** ({file.name})")
-            
-            img = Image.open(file)
-            img = img.convert('L')
-            max_size = (1200, 1200)
-            img.thumbnail(max_size, Image.Resampling.LANCZOS)
-
-            extracted_text = pytesseract.image_to_string(img, lang='kor+eng')
-            lines = extracted_text.split('\n')
-            
-            pending_stock_name = None  # 이전 줄에서 발견된 종목명을 기억하는 변수
-            
-            for line in lines:
-                clean_line = line.strip()
-                if not clean_line:
-                    continue
-                
-                # 1) 현재 줄에 종목명이 있는지 먼저 찾기
-                found_stock_in_line = None
-                for stock_name in st.session_state.df1_data['종목']:
-                    search_name = stock_name.replace(" ", "")
-                    # 이름 일부만 맞아도 인식하도록 유연성 부여 (앞 4글자 이상)
-                    if search_name in clean_line.replace(" ", "") or (len(search_name) >= 4 and search_name[:4] in clean_line.replace(" ", "")):
-                        found_stock_in_line = stock_name
-                        pending_stock_name = stock_name # 기억해둠
-                        break
-                
-                # 2) 현재 줄에서 평가금액(숫자) 찾기
-                amounts = re.findall(r'\b(?:\d{1,3})(?:,\d{3}){2,}\b', clean_line)
-                if not amounts:
-                    amounts = re.findall(r'\b\d{6,10}\b', clean_line)
-                
-                # 3) 숫자가 발견되었다면, 기억해둔 종목명과 짝짓기
-                if amounts:
-                    val_str = amounts[-1].replace(',', '')
-                    if not val_str.isdigit():
-                        continue
-                    val = int(val_str)
-                    
-                    if val < 100000:
-                        continue # 너무 작은 숫자는 무시 (수익률, 단가 등일 확률)
-                        
-                    # 같은 줄이든, 이전 줄이든 방금 찾은 종목이 있다면 금액 업데이트
-                    target_stock = found_stock_in_line or pending_stock_name
-                    
-                    if target_stock:
-                        st.session_state.df1_data.loc[st.session_state.df1_data['종목'] == target_stock, '평가금액'] = val
-                        updated_data.append(f"✅ {target_stock}: {val:,} 원")
-                        pending_stock_name = None # 매칭 성공 시 기억 비우기
-
-            time.sleep(0.5)
-
-        progress_bar.progress(100)
-        status_text.write("✅ **모든 데이터 추출 완료!**")
-        time.sleep(1)
-        
-        status_text.empty()
-        progress_bar.empty()
-        
-        if updated_data:
-            unique_updates = list(set(updated_data))
-            st.success(f"수치 자동 추출이 완료되었습니다!\\n\\n" + "\\n".join(unique_updates))
-            save_data()
-        else:
-            st.warning("⚠️ 사진에서 평가금액을 인식하지 못했습니다. 화면 캡처가 잘리지 않았는지 확인해주세요.")
-            
-    except Exception as e:
-        progress_bar.empty()
-        status_text.empty()
-        st.error(f"❌ 분석 중 에러가 발생했습니다: {e}")
-
 # 탭 구성
 tab1, tab2, tab3 = st.tabs(["📊 1. 금융포트폴리오", "🏠 2. VISON2050", "👶 3. 자녀증여"])
 
 # ----------------------------------------------------
-# TAB 1: 금융자산 포트폴리오
+# TAB 1: 금융자산 포트폴리오 (수동 입력 전용)
 # ----------------------------------------------------
 with tab1:
     st.markdown('<div class="app-card">', unsafe_allow_html=True)
     st.markdown('<div class="header-title">금융자산 포트폴리오</div>', unsafe_allow_html=True)
     
-    with st.expander("📸 캡처 사진으로 평가금액 자동 업데이트", expanded=False):
-        uploaded_files = st.file_uploader(
-            "증권사 잔고 캡처 사진 업로드",
-            type=["jpg", "jpeg", "png"],
-            accept_multiple_files=True
-        )
-        if uploaded_files:
-            if st.button("🚀 사진에서 평가금액 추출 및 적용"):
-                process_uploaded_images_with_progress(uploaded_files)
-                time.sleep(1.5)
-                st.rerun()
-
     df1 = st.session_state.df1_data.copy()
     
     for col in ["구분", "종목", "평가금액", "그룹"]:
